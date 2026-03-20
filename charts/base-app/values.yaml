@@ -1,0 +1,8 @@
+image:
+  repository: nginx
+  tag: latest
+
+port: 80
+
+env: {}
+#  KEY: value

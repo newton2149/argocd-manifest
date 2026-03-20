@@ -1,0 +1,61 @@
+# This file configures ArgoCD Image Updater to automatically update the
+# ApplicationSet when new images are pushed to the container registry.
+
+# To enable this, we need to add specific annotations to our ArgoCD Application.
+# Since we are using an ApplicationSet, we add these annotations to the template.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: shipit-tenant-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+  - git:
+      repoURL: git@github.com:example/shipit.git # This should match the repository where shipit is hosted
+      revision: main
+      directories:
+      - path: manifests/*/*
+  template:
+    metadata:
+      name: '{{.path.basename}}'
+      annotations:
+        # Enable image auto-update for this application
+        argocd-image-updater.argoproj.io/image-list: myapp=shipit.azurecr.io/{{.path.basename}}
+        
+        # Determine the update strategy (digest, latest, semver)
+        # We use 'latest' tracking the most recent timestamp push to the tag,
+        # or we track commit SHAs. Since Kaniko/BuildKit pushes commit SHAs as tags,
+        # we can use 'latest' strategy to get the most recently pushed tag.
+        argocd-image-updater.argoproj.io/myapp.update-strategy: latest
+        
+        # Tell ArgoCD Image Updater which Helm parameter to update
+        argocd-image-updater.argoproj.io/myapp.helm.image-name: image.repository
+        argocd-image-updater.argoproj.io/myapp.helm.image-tag: image.tag
+        
+        # Tell Image Updater to write back the change to Git (GitOps)
+        argocd-image-updater.argoproj.io/write-back-method: git
+        
+        # Specify the secret containing the SSH key to write back to the repo
+        # Note: The secret 'argocd-git-credentials' must exist in the argocd namespace
+        argocd-image-updater.argoproj.io/git-branch: main
+    spec:
+      project: default
+      source:
+        repoURL: git@github.com:example/shipit.git
+        targetRevision: main
+        path: manifests/charts/base-app
+        helm:
+          valueFiles:
+          - '../../{{.path.path}}/values.yaml'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'user-{{.path.basenameDir}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
