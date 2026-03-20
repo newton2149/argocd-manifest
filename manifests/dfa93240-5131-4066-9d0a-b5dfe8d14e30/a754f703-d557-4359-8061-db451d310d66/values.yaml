@@ -1,4 +1,0 @@
-image:
-    repository: shipitprod.azurecr.io/test-shipit-example
-    tag: latest
-port: 8080
